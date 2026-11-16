@@ -26,3 +26,5 @@ Classes: `feat`, `fix`, `chore`, `test`, `docs`, `update`, `upgrade`, `ci`.
 Join two or three nouns with ` + ` when one commit covers them. Stay on one line.
 
 No em dashes, en dashes, or hyphens in the subject. No extra brackets or parentheses. The class brackets are the whole prefix.
+
+One feature per branch. Use a short branch name. The pull request title copies the feature commit subject.

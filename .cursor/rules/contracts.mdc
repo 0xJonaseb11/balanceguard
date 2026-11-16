@@ -1,0 +1,24 @@
+---
+description: Uniswap v4 hook and Foundry conventions for Balanceguard
+globs: "**/*.sol"
+alwaysApply: false
+---
+
+# Contracts
+
+Balanceguard is a Uniswap v4 dynamic fee hook on Unichain Sepolia (chain id 1301). PoolManager: `0x00B036B58a818B1BC34d502D3fE730Db729e62AC`.
+
+- Foundry layout: `contracts/src`, `contracts/test`, `contracts/script`.
+- Solidity 0.8.26 or the version pinned by the installed v4 core. Enable the optimizer only in foundry config.
+- Initialize only on a pool whose fee carries the dynamic fee flag. Revert otherwise.
+- `beforeSwap` returns the selector, a zero delta, and `fee | OVERRIDE_FEE_FLAG`.
+- Mine the hook address for the before swap flag. Do not add callback flags the implementation does not handle.
+- Inventory is the value weight of the strategy position at the current `sqrtPriceX96`. Store the position id and range. Derive amounts. Do not keep a second reserve ledger on the swap path.
+- Fee units are hundredths of a bip. 0.05% is 500. 0.35% is 3500. 0.50% is 5000. The protocol cap is 1_000_000.
+- Put the curve and the inventory math in pure libraries. The hook only reads pool state and returns the fee.
+- Fuzz the clamp, both swap directions, and the band edges. Every public state change needs a forge test in the same change.
+
+```solidity
+uint24 public constant MIN_FEE = 500;
+uint24 public constant MAX_FEE = 5000;
+```

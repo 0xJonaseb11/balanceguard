@@ -1,0 +1,37 @@
+---
+description: Small typed functions, no comments, trusted dependencies
+alwaysApply: true
+---
+
+# Code quality
+
+Write code a teammate can change months later without a walkthrough.
+
+- Name values for the role they play. A precise longer name beats a short vague one.
+- One job per function. If a block needs a name to be clear, extract it.
+- Keep control flow flat. Return early instead of nesting.
+- Type inputs, outputs, and public data. No `any`, no unchecked casts.
+- Handle failure where the caller can recover or report it. Never swallow an error.
+- Remove unused code in the same change that makes it unused.
+- Follow the structure already in the file before adding a new pattern.
+- Prefer obvious data flow over clever abstraction.
+
+Do not add comments, docstrings, file headers, TODOs, or commented out code. If a block needs a comment, rename or split it until the code states the point.
+
+Add a package only when the platform or the current code cannot do the job cleanly.
+
+Before installing:
+
+- Use the official registry. No gists, raw URLs, unknown git repos, or mirrored tarballs.
+- Use the real package name. Reject a name that is one character off a known package.
+- Use a current stable release. No beta, nightly, alpha, or `*` range.
+- Read `preinstall` and `postinstall` scripts first. Skip the package if those scripts download code or run a remote binary.
+- Pin the version and commit the lockfile in the same change.
+
+```solidity
+function clampFee(uint24 fee, uint24 minFee, uint24 maxFee) internal pure returns (uint24) {
+    if (fee < minFee) return minFee;
+    if (fee > maxFee) return maxFee;
+    return fee;
+}
+```

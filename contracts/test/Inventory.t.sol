@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
+import {FixedPoint128} from "v4-core/libraries/FixedPoint128.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {FeeCurve} from "../src/libraries/FeeCurve.sol";
 import {Inventory} from "../src/libraries/Inventory.sol";
@@ -17,6 +18,14 @@ contract InventoryHarness {
 
     function weight0(uint256 amount0, uint256 amount1, uint160 sqrtPriceX96) external pure returns (uint256) {
         return Inventory.weight0(amount0, amount1, sqrtPriceX96);
+    }
+
+    function owed(uint128 liquidity, uint256 feeGrowthInsideX128, uint256 feeGrowthInsideLastX128)
+        external
+        pure
+        returns (uint256)
+    {
+        return Inventory.owed(liquidity, feeGrowthInsideX128, feeGrowthInsideLastX128);
     }
 }
 
@@ -63,6 +72,14 @@ contract InventoryTest is Test {
         (uint256 amount0, uint256 amount1) = harness.amounts(0, sqrtOne, sqrtLower, sqrtUpper);
         assertEq(amount0, 0);
         assertEq(amount1, 0);
+    }
+
+    function test_uncollectedFeesAddToTheHeavySide() public view {
+        assertEq(harness.owed(1e18, FixedPoint128.Q128, 0), 1e18);
+        (uint256 amount0, uint256 amount1) = harness.amounts(1e18, sqrtOne, sqrtLower, sqrtUpper);
+        uint256 plain = harness.weight0(amount0, amount1, sqrtOne);
+        uint256 withFees = harness.weight0(amount0 + 5e16, amount1, sqrtOne);
+        assertGt(withFees, plain);
     }
 
     function test_rejectsEmptyAndBrokenInputs() public {

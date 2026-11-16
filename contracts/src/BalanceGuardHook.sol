@@ -21,9 +21,10 @@ contract BalanceGuardHook is IHooks {
     IPoolManager public immutable poolManager;
     address public owner;
     FeeCurve.Params public strategy;
+    address public positionOwner;
     int24 public tickLower;
     int24 public tickUpper;
-    uint128 public liquidity;
+    bytes32 public positionSalt;
     bool public paused;
     PoolId public poolId;
 
@@ -68,11 +69,14 @@ contract BalanceGuardHook is IHooks {
         strategy = nextStrategy;
     }
 
-    function setPosition(int24 lower, int24 upper, uint128 nextLiquidity) external onlyOwner {
-        if (lower >= upper || lower < TickMath.MIN_TICK || upper > TickMath.MAX_TICK) revert InvalidPosition();
+    function setPosition(address nextOwner, int24 lower, int24 upper, bytes32 nextSalt) external onlyOwner {
+        if (nextOwner == address(0) || lower >= upper || lower < TickMath.MIN_TICK || upper > TickMath.MAX_TICK) {
+            revert InvalidPosition();
+        }
+        positionOwner = nextOwner;
         tickLower = lower;
         tickUpper = upper;
-        liquidity = nextLiquidity;
+        positionSalt = nextSalt;
     }
 
     function setPaused(bool nextPaused) external onlyOwner {
@@ -80,18 +84,29 @@ contract BalanceGuardHook is IHooks {
     }
 
     function quoteFee(bool zeroForOne) public view returns (uint24 fee, uint256 weight0Wad) {
-        if (paused || liquidity == 0) return (strategy.baseFee, strategy.targetWad);
+        FeeCurve.Params memory params = strategy;
+        if (paused || positionOwner == address(0)) return (params.baseFee, params.targetWad);
+
+        (uint128 positionLiquidity, uint256 growth0Last, uint256 growth1Last) =
+            poolManager.getPositionInfo(poolId, positionOwner, tickLower, tickUpper, positionSalt);
+        if (positionLiquidity == 0) return (params.baseFee, params.targetWad);
 
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
-        if (sqrtPriceX96 == 0) return (strategy.baseFee, strategy.targetWad);
+        if (sqrtPriceX96 == 0) return (params.baseFee, params.targetWad);
 
         (uint256 amount0, uint256 amount1) = Inventory.amounts(
-            liquidity, sqrtPriceX96, TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper)
+            positionLiquidity,
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(tickLower),
+            TickMath.getSqrtPriceAtTick(tickUpper)
         );
-        if (amount0 == 0 && amount1 == 0) return (strategy.baseFee, strategy.targetWad);
+        (uint256 growth0, uint256 growth1) = poolManager.getFeeGrowthInside(poolId, tickLower, tickUpper);
+        amount0 += Inventory.owed(positionLiquidity, growth0, growth0Last);
+        amount1 += Inventory.owed(positionLiquidity, growth1, growth1Last);
+        if (amount0 == 0 && amount1 == 0) return (params.baseFee, params.targetWad);
 
         weight0Wad = Inventory.weight0(amount0, amount1, sqrtPriceX96);
-        fee = FeeCurve.quote(weight0Wad, zeroForOne, strategy);
+        fee = FeeCurve.quote(weight0Wad, zeroForOne, params);
     }
 
     function beforeInitialize(address, PoolKey calldata key, uint160) external returns (bytes4) {

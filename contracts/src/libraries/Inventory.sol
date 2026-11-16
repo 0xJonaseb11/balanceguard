@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {FixedPoint128} from "v4-core/libraries/FixedPoint128.sol";
 import {FullMath} from "v4-core/libraries/FullMath.sol";
 import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
 import {FeeCurve} from "./FeeCurve.sol";
@@ -38,5 +39,15 @@ library Inventory {
         uint256 total = value0 + amount1;
         if (total == 0) return 0;
         return FullMath.mulDiv(value0, FeeCurve.WAD, total);
+    }
+
+    function owed(uint128 liquidity, uint256 feeGrowthInsideX128, uint256 feeGrowthInsideLastX128)
+        internal
+        pure
+        returns (uint256)
+    {
+        unchecked {
+            return FullMath.mulDiv(feeGrowthInsideX128 - feeGrowthInsideLastX128, liquidity, FixedPoint128.Q128);
+        }
     }
 }

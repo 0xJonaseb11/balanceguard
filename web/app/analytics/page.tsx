@@ -16,6 +16,8 @@ export default function AnalyticsPage() {
           <div className="ranges">
             <button className={span === 4 ? "on" : undefined} type="button" onClick={() => setSpan(4)}>1h</button>
             <button className={span === 12 ? "on" : undefined} type="button" onClick={() => setSpan(12)}>24h</button>
+            <button className={span === 18 ? "on" : undefined} type="button" onClick={() => setSpan(18)}>7d</button>
+            <button className={span === 24 ? "on" : undefined} type="button" onClick={() => setSpan(24)}>30d</button>
           </div>
         </div>
         <Chart weightWad={guard.weightWad} span={span} />

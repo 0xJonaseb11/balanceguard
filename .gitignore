@@ -41,5 +41,6 @@ pnpm-debug.log*
 # generated
 *.tsbuildinfo
 web/AGENTS.md
+web/dist-check/
 
 .cursor/

@@ -4,14 +4,19 @@ pragma solidity 0.8.26;
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {Deployers} from "v4-core-test/utils/Deployers.sol";
 import {BalanceGuardHook} from "../src/BalanceGuardHook.sol";
 import {FeeCurve} from "../src/libraries/FeeCurve.sol";
 import {HookMiner} from "../src/libraries/HookMiner.sol";
+import {Inventory} from "../src/libraries/Inventory.sol";
 
 contract BalanceGuardHookTest is Deployers {
+    using StateLibrary for IPoolManager;
+
     BalanceGuardHook internal hook;
 
     function setUp() public {
@@ -44,14 +49,14 @@ contract BalanceGuardHookTest is Deployers {
     }
 
     function test_pausedSwapUsesBaseFee() public {
-        hook.setPosition(-600, 600, 1e18);
+        _trackHeavyPosition();
         hook.setPaused(true);
         BalanceDelta delta = swap(key, true, -1e15, ZERO_BYTES);
         assertApproxEqAbs(_out(delta), (1e15 * 997_000) / 1_000_000, 1e12);
     }
 
     function test_tokenHeavyPositionChargesTheCap() public {
-        hook.setPosition(600, 1200, 1e18);
+        _trackHeavyPosition();
         (uint24 fee, uint256 weight) = hook.quoteFee(true);
         assertEq(weight, FeeCurve.WAD);
         assertEq(fee, FeeCurve.BALANCED_GROWTH_MAX_FEE);
@@ -61,14 +66,46 @@ contract BalanceGuardHookTest is Deployers {
     }
 
     function test_repairingSideGetsTheFloor() public {
-        hook.setPosition(600, 1200, 1e18);
+        _trackHeavyPosition();
         (uint24 fee,) = hook.quoteFee(false);
         assertEq(fee, FeeCurve.BALANCED_GROWTH_MIN_FEE);
+    }
+
+    function test_uncollectedFeesEnterTheWeight() public {
+        hook.setPosition(address(modifyLiquidityRouter), -120, 120, bytes32(0));
+        swap(key, true, -1e16, ZERO_BYTES);
+
+        (uint128 positionLiquidity, uint256 growth0Last, uint256 growth1Last) =
+            manager.getPositionInfo(key.toId(), address(modifyLiquidityRouter), -120, 120, bytes32(0));
+        (uint256 growth0, uint256 growth1) = manager.getFeeGrowthInside(key.toId(), -120, 120);
+        uint256 fees0 = Inventory.owed(positionLiquidity, growth0, growth0Last);
+        uint256 fees1 = Inventory.owed(positionLiquidity, growth1, growth1Last);
+        assertGt(fees0, 0);
+
+        (uint160 sqrtPriceX96,,,) = manager.getSlot0(key.toId());
+        (uint256 amount0, uint256 amount1) = Inventory.amounts(
+            positionLiquidity,
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(-120),
+            TickMath.getSqrtPriceAtTick(120)
+        );
+        uint256 fullWeight = Inventory.weight0(amount0 + fees0, amount1 + fees1, sqrtPriceX96);
+        (, uint256 quoted) = hook.quoteFee(true);
+        assertEq(quoted, fullWeight);
     }
 
     function test_directCallbackReverts() public {
         vm.expectRevert(BalanceGuardHook.NotPoolManager.selector);
         hook.beforeInitialize(address(this), key, SQRT_PRICE_1_1);
+    }
+
+    function _trackHeavyPosition() private {
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({tickLower: 600, tickUpper: 1200, liquidityDelta: 1e18, salt: 0}),
+            ZERO_BYTES
+        );
+        hook.setPosition(address(modifyLiquidityRouter), 600, 1200, bytes32(0));
     }
 
     function _out(BalanceDelta delta) private pure returns (uint256) {

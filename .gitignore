@@ -1,0 +1,39 @@
+# foundry
+cache/
+out/
+broadcast/
+
+# node
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+.vercel/
+
+# coverage and generated types
+coverage/
+lcov.info
+artifacts/
+typechain-types/
+types/ethers-contracts/
+
+# yarn berry generated state
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+.pnp.*
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# os and logs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

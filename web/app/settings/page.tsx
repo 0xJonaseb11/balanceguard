@@ -12,10 +12,20 @@ export default function SettingsPage() {
       <article className="card" style={{ maxWidth: 640 }}>
         <h2>Quoting</h2>
         <p className="muted">Pause returns the flat base fee. The position and the strategy stay in place.</p>
-        <button className="primary" style={{ width: "auto", marginTop: 12 }} type="button" onClick={() => guard.setPaused(!guard.paused)}>
+        <button
+          className="primary"
+          style={{ width: "auto", marginTop: 12 }}
+          type="button"
+          disabled={guard.chainLive && !guard.canPause}
+          onClick={() => guard.setPaused(!guard.paused)}
+        >
           {guard.paused ? "Resume adaptive fees" : "Pause to base fee"}
         </button>
-        <p className="small muted">Hook {hook ?? "not configured"}. Set NEXT_PUBLIC_HOOK_ADDRESS after deploy.</p>
+        <p className="small muted">
+          {guard.chainLive && !guard.canPause
+            ? "Only the manager can pause."
+            : `Hook ${hook ?? "not configured"}. Set NEXT_PUBLIC_HOOK_ADDRESS after deploy.`}
+        </p>
       </article>
     </>
   );

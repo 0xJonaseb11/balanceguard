@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "check:fee": "tsc -p tsconfig.check.json && node dist-check/feeCurve.check.js"
   },
   "dependencies": {
     "@tanstack/react-query": "5.107.1",

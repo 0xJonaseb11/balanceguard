@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "outDir": "dist-check",
+    "types": ["node"],
+    "skipLibCheck": true
+  },
+  "files": ["lib/feeCurve.check.ts", "lib/feeCurve.ts", "lib/inventory.ts"]
+}

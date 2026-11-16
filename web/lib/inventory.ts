@@ -20,6 +20,18 @@ export function weight0(amount0: bigint, amount1: bigint, sqrtPriceX96: bigint =
   return (value0 * WAD) / total;
 }
 
+export function formatPrice(sqrtPriceX96: bigint): string {
+  const scale = 10n ** 4n;
+  const scaled = (sqrtPriceX96 * sqrtPriceX96 * scale) / 2n ** 192n;
+  const whole = scaled / scale;
+  const frac = (scaled % scale).toString().padStart(4, "0");
+  return `${whole.toString()}.${frac}`;
+}
+
+export function formatLiquidity(value: bigint): string {
+  return value.toLocaleString("en-US");
+}
+
 export function applyTrade(amount0: bigint, amount1: bigint, zeroForOne: boolean, pointsWad: bigint) {
   const moved = zeroForOne ? (pointsWad > amount1 ? amount1 : pointsWad) : pointsWad > amount0 ? amount0 : pointsWad;
   return zeroForOne

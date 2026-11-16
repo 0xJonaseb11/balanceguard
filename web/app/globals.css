@@ -168,6 +168,11 @@ h1 em { font-style: normal; color: var(--purple-2); }
   border-radius: 14px;
   padding: 10px;
 }
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .primary {
   width: 100%;
   border: 0;

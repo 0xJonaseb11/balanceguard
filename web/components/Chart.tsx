@@ -4,7 +4,10 @@ import { useState } from "react";
 import { formatFee, formatWeight, quote } from "@/lib/feeCurve";
 
 const HOURS = ["12AM", "6AM", "12PM", "6PM", "12AM"];
-const SHAPE = [0.42, 0.45, 0.47, 0.46, 0.48, 0.47, 0.49, 0.5, 0.505, 0.51, 0.515, 0.518];
+const SHAPE = [
+  0.42, 0.45, 0.47, 0.46, 0.48, 0.47, 0.49, 0.5, 0.505, 0.51, 0.515, 0.518, 0.522, 0.519, 0.516, 0.52, 0.524, 0.521,
+  0.518, 0.523, 0.527, 0.524, 0.52, 0.521,
+];
 
 export function Chart({ weightWad, span }: { weightWad: bigint; span: number }) {
   const [hover, setHover] = useState<number | null>(null);

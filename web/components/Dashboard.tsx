@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Chart } from "@/components/Chart";
 import { formatFee, formatFeeDelta, formatWeight, riskLabel } from "@/lib/feeCurve";
+import { formatLiquidity } from "@/lib/inventory";
 import { useGuard } from "@/state/guard";
 
 const LIQUIDITY_USD = 248_720;
@@ -11,7 +12,7 @@ const LIQUIDITY_USD = 248_720;
 export function Dashboard() {
   const guard = useGuard();
   const [range, setRange] = useState("24h");
-  const span = range === "1h" ? 4 : 12;
+  const span = range === "1h" ? 4 : range === "7d" ? 18 : range === "30d" ? 24 : 12;
   const [zeroForOne, setZeroForOne] = useState(true);
   const other = 1 - Number(guard.weightWad) / 1e18;
   const risk = guard.paused ? "Low" : riskLabel(guard.weightWad, guard.params);
@@ -24,8 +25,12 @@ export function Dashboard() {
       <section className="grid-4">
         <article className="card">
           <div className="stat-label"><span className="icon">◆</span>Total liquidity</div>
-          <div className="stat-value">${LIQUIDITY_USD.toLocaleString("en-US")}</div>
-          <div className="up">+8.3%</div>
+          <div className="stat-value">
+            {guard.chainLive && guard.poolLiquidity !== undefined
+              ? formatLiquidity(guard.poolLiquidity)
+              : `$${LIQUIDITY_USD.toLocaleString("en-US")}`}
+          </div>
+          <div className="up">{guard.chainLive ? "Pool liquidity" : "+8.3%"}</div>
         </article>
         <article className="card">
           <div className="stat-label"><span className="icon">⚖</span>Inventory balance</div>
@@ -56,6 +61,7 @@ export function Dashboard() {
                 ))}
               </div>
             </div>
+            {guard.poolPrice ? <p className="muted small">Pool price {guard.poolPrice}</p> : null}
             <div className="legend">
               <span><i className="swatch inv" />Inventory balance</span>
               <span><i className="swatch fee" />Swap fee</span>

@@ -3,11 +3,21 @@ pragma solidity 0.8.26;
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 
+/*
+ * @title HookMiner
+ * @author 0xJonaseb11
+ * @notice Finds a CREATE2 salt that yields a hook address with the required flags
+*/
 library HookMiner {
     error MineFailed();
 
     uint160 internal constant FLAGS = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG;
 
+    /*
+     * @notice Searches salts until the CREATE2 address carries the hook flags
+     * @param deployer Address that deploys the hook
+     * @param initCodeHash Hash of the hook init code
+    */
     function mine(address deployer, bytes32 initCodeHash) internal pure returns (address hook, bytes32 salt) {
         for (uint256 i; i < 200_000; ++i) {
             salt = bytes32(i);

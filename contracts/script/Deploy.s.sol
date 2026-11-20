@@ -14,6 +14,11 @@ import {GuardToken} from "../src/GuardToken.sol";
 import {HookMiner} from "../src/libraries/HookMiner.sol";
 import {PoolSeed} from "../src/PoolSeed.sol";
 
+/*
+ * @title DeployBalanceGuard
+ * @author 0xJonaseb11
+ * @notice Deploys the hook, tokens, pool, and router, then writes the dashboard env file
+*/
 contract DeployBalanceGuard is Script {
     address internal constant POOL_MANAGER = 0x00B036B58a818B1BC34d502D3fE730Db729e62AC;
     uint256 internal constant SEED_FUND = 1_000 ether;
@@ -30,6 +35,9 @@ contract DeployBalanceGuard is Script {
         uint256 deployBlock;
     }
 
+    /*
+     * @notice Deploys with PRIVATE_KEY and writes the dashboard env file
+    */
     function run() external returns (Deployment memory deployment) {
         deployment = deploy(vm.envUint("PRIVATE_KEY"));
         _writeDashboardEnv(deployment);
@@ -39,6 +47,10 @@ contract DeployBalanceGuard is Script {
         console2.log("token1", Currency.unwrap(deployment.key.currency1));
     }
 
+    /*
+     * @notice Deploys and wires the hook, pool, position, and router
+     * @param privateKey Private key of the deployer
+    */
     function deploy(uint256 privateKey) public returns (Deployment memory deployment) {
         address deployer = vm.addr(privateKey);
         IPoolManager manager = IPoolManager(POOL_MANAGER);
@@ -53,6 +65,11 @@ contract DeployBalanceGuard is Script {
         vm.stopBroadcast();
     }
 
+    /*
+     * @notice Mines a salt and deploys the hook at the matching address
+     * @param manager PoolManager the hook serves
+     * @param owner Address that owns the hook
+    */
     function _deployHook(IPoolManager manager, address owner) private returns (BalanceGuardHook hook) {
         bytes memory args = abi.encode(manager, owner);
         bytes32 initCodeHash = keccak256(abi.encodePacked(type(BalanceGuardHook).creationCode, args));
@@ -61,6 +78,12 @@ contract DeployBalanceGuard is Script {
         if (address(hook) != predicted) revert HookMiner.MineFailed();
     }
 
+    /*
+     * @notice Deploys the test tokens and opens the seeded dynamic fee pool
+     * @param seed Seed contract that opens the pool
+     * @param hook Hook the pool uses
+     * @param deployer Address that funds the test tokens
+    */
     function _openPool(PoolSeed seed, BalanceGuardHook hook, address deployer) private returns (PoolKey memory key) {
         GuardToken tokenA = new GuardToken("Guard Token A", "GTA", deployer, SEED_FUND);
         GuardToken tokenB = new GuardToken("Guard Token B", "GTB", deployer, SEED_FUND);
@@ -68,7 +91,13 @@ contract DeployBalanceGuard is Script {
         tokenB.approve(address(seed), SEED_FUND);
 
         (Currency currency0, Currency currency1) = _sort(address(tokenA), address(tokenB));
-        key = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, TICK_SPACING, IHooks(address(hook)));
+        key = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
         seed.open(
             key,
             TickMath.getSqrtPriceAtTick(0),
@@ -81,6 +110,10 @@ contract DeployBalanceGuard is Script {
         );
     }
 
+    /*
+     * @notice Writes the hook, router, and deploy block to the dashboard env file
+     * @param deployment Deployed addresses and deploy block
+    */
     function _writeDashboardEnv(Deployment memory deployment) private {
         string memory body = string.concat(
             "NEXT_PUBLIC_HOOK_ADDRESS=",
@@ -96,6 +129,11 @@ contract DeployBalanceGuard is Script {
         vm.writeFile(DASHBOARD_ENV, body);
     }
 
+    /*
+     * @notice Orders two token addresses as currency0 and currency1
+     * @param tokenA First token address
+     * @param tokenB Second token address
+    */
     function _sort(address tokenA, address tokenB) private pure returns (Currency currency0, Currency currency1) {
         if (tokenA < tokenB) return (Currency.wrap(tokenA), Currency.wrap(tokenB));
         return (Currency.wrap(tokenB), Currency.wrap(tokenA));

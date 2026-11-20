@@ -13,6 +13,7 @@ import {BalanceGuardHook} from "../src/BalanceGuardHook.sol";
 import {FeeCurve} from "../src/libraries/FeeCurve.sol";
 import {HookMiner} from "../src/libraries/HookMiner.sol";
 import {Inventory} from "../src/libraries/Inventory.sol";
+import {SafeCast} from "v4-core/libraries/SafeCast.sol";
 
 contract BalanceGuardHookTest is Deployers {
     using StateLibrary for IPoolManager;
@@ -35,7 +36,13 @@ contract BalanceGuardHookTest is Deployers {
     }
 
     function test_staticFeePoolReverts() public {
-        PoolKey memory staticKey = PoolKey(currency0, currency1, 3000, 60, IHooks(address(hook)));
+        PoolKey memory staticKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(hook))
+        });
         (bool ok, bytes memory reason) =
             address(manager).call(abi.encodeCall(manager.initialize, (staticKey, SQRT_PRICE_1_1)));
         assertFalse(ok);
@@ -92,6 +99,21 @@ contract BalanceGuardHookTest is Deployers {
         uint256 fullWeight = Inventory.weight0(amount0 + fees0, amount1 + fees1, sqrtPriceX96);
         (, uint256 quoted) = hook.quoteFee(true);
         assertEq(quoted, fullWeight);
+
+        (uint256 held0, uint256 held1, uint160 heldPrice) = hook.inventory();
+        assertEq(held0, amount0 + fees0);
+        assertEq(held1, amount1 + fees1);
+        assertEq(heldPrice, sqrtPriceX96);
+    }
+
+    function test_untrackedPositionReportsEmptyInventory() public view {
+        (uint256 amount0, uint256 amount1, uint160 sqrtPriceX96) = hook.inventory();
+        assertEq(amount0, 0);
+        assertEq(amount1, 0);
+        assertEq(sqrtPriceX96, 0);
+        (uint24 fee, uint256 weight) = hook.quoteFee(true);
+        assertEq(fee, FeeCurve.BALANCED_GROWTH_BASE_FEE);
+        assertEq(weight, FeeCurve.BALANCED_GROWTH_TARGET_WAD);
     }
 
     function test_directCallbackReverts() public {
@@ -111,7 +133,7 @@ contract BalanceGuardHookTest is Deployers {
     function _out(BalanceDelta delta) private pure returns (uint256) {
         int128 amount1 = delta.amount1();
         if (amount1 < 0) amount1 = -amount1;
-        return uint256(uint128(amount1));
+        return SafeCast.toUint128(amount1);
     }
 
     function _contains(bytes memory reason, bytes4 selector) private pure returns (bool) {

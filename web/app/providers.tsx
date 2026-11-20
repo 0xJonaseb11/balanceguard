@@ -10,9 +10,15 @@ import { GuardProvider } from "@/state/guard";
 const config = createConfig({
   chains: [unichainSepolia],
   connectors: [injected()],
-  transports: { [unichainSepolia.id]: http() },
+  transports: { [unichainSepolia.id]: http(unichainSepolia.rpcUrls.default.http[0]) },
   ssr: true,
 });
+
+declare module "wagmi" {
+  interface Register {
+    config: typeof config;
+  }
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());

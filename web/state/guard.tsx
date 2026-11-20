@@ -1,161 +1,177 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
-import { hookAbi, hookAddress, stateViewAbi, stateViewAddress, zeroAddress } from "@/lib/chain";
-import { balancedGrowth, formatFee, quote, WAD, type FeeParams } from "@/lib/feeCurve";
-import { START_AMOUNT0, START_AMOUNT1, applyTrade, formatPrice, weight0 } from "@/lib/inventory";
+import { createContext, useContext, type ReactNode } from "react";
+import { hookAddress, txUrl } from "@/lib/chain";
+import { balancedGrowth, formatFee, quote, type FeeParams } from "@/lib/feeCurve";
+import { formatToken, positionAmounts, value0In1, weight0 } from "@/lib/inventory";
+import { formatAgo, historySeries, scenarioSeries, type ChartPoint, type RangeOption } from "@/lib/series";
+import { sqrtPriceAtTick } from "@/lib/tickMath";
+import { walletErrorMessage } from "@/lib/walletError";
+import { useWalletStatus } from "@/lib/useWalletStatus";
+import { useChainPool, type ChainPool } from "./useChainPool";
+import { useScenario, type ActivityItem, type ScenarioStep } from "./useScenario";
+import { useSwapHistory, type SwapHistory } from "./useSwapHistory";
 
-export type ActivityItem = {
-  id: string;
-  text: string;
-  ago: string;
-};
+export type { ActivityItem } from "./useScenario";
 
-type GuardContextValue = {
+export type PositionView = {
   amount0: bigint;
   amount1: bigint;
-  weightWad: bigint;
-  fee: number;
-  params: FeeParams;
-  paused: boolean;
-  activity: ActivityItem[];
-  step: 0 | 1 | 2 | 3;
-  chainLive: boolean;
-  poolLiquidity?: bigint;
-  poolPrice?: string;
-  canPause: boolean;
+  valueIn1: bigint;
+  symbol0: string;
+  symbol1: string;
+};
+
+export type ScenarioControls = {
+  step: ScenarioStep;
   runSimulation: (zeroForOne: boolean) => void;
   setPaused: (paused: boolean) => void;
 };
 
-const GuardContext = createContext<GuardContextValue | null>(null);
+export type GuardView = {
+  mode: "scenario" | "chain";
+  ready: boolean;
+  error?: string;
+  weightWad: bigint;
+  fee: number;
+  quotes: { zeroForOne: number; oneForZero: number };
+  params: FeeParams;
+  paused: boolean;
+  position?: PositionView;
+  activity: ActivityItem[];
+  series: (range: RangeOption) => ChartPoint[];
+  pool?: ChainPool;
+  isOwner: boolean;
+  scenario?: ScenarioControls;
+  refresh: () => Promise<void>;
+};
 
-const TRADE_POINTS = 20n * 10n ** 15n;
-const ZERO_POOL = `0x${"0".repeat(64)}` as const;
+const GuardContext = createContext<GuardView | null>(null);
 
-type QuoteResult = readonly [fee: number | bigint, weight0Wad: bigint];
-type StrategyResult = readonly [bigint, number | bigint, number | bigint, number | bigint, bigint];
+const CHAIN_SYMBOL0 = "token0";
+const CHAIN_SYMBOL1 = "token1";
+const HISTORY_LIQUIDITY = 10n ** 18n;
 
-function strategyParams(value: StrategyResult | undefined): FeeParams {
-  if (!value) return balancedGrowth;
+function worseningFee(weightWad: bigint, params: FeeParams): number {
+  return quote(weightWad, weightWad > params.targetWad, params);
+}
+
+function positionView(pool: ChainPool): PositionView | undefined {
+  if (pool.sqrtPriceX96 === 0n) return undefined;
   return {
-    targetWad: value[0],
-    minFee: Number(value[1]),
-    baseFee: Number(value[2]),
-    maxFee: Number(value[3]),
-    slope: value[4],
+    amount0: pool.amount0,
+    amount1: pool.amount1,
+    valueIn1: value0In1(pool.amount0, pool.sqrtPriceX96) + pool.amount1,
+    symbol0: pool.token0?.symbol ?? CHAIN_SYMBOL0,
+    symbol1: pool.token1?.symbol ?? CHAIN_SYMBOL1,
   };
+}
+
+function weightAtPrice(sqrtPriceX96: bigint, pool: ChainPool): bigint {
+  const held = positionAmounts(
+    HISTORY_LIQUIDITY,
+    sqrtPriceX96,
+    sqrtPriceAtTick(pool.tickLower),
+    sqrtPriceAtTick(pool.tickUpper),
+  );
+  return weight0(held.amount0, held.amount1, sqrtPriceX96);
+}
+
+function chainActivity(history: SwapHistory | undefined, pool: ChainPool | undefined): ActivityItem[] {
+  if (!history) return [];
+  return [...history.swaps].reverse().map((swap) => {
+    const tokenIn = swap.zeroForOne ? pool?.token0?.symbol ?? CHAIN_SYMBOL0 : pool?.token1?.symbol ?? CHAIN_SYMBOL1;
+    return {
+      id: swap.id,
+      text: `Sold ${formatToken(swap.amountIn)} ${tokenIn} at ${formatFee(swap.fee)}`,
+      ago: formatAgo(history.nowSeconds - swap.timestamp),
+      href: txUrl(swap.txHash),
+    };
+  });
+}
+
+function useChainView(): GuardView {
+  const wallet = useWalletStatus();
+  const chain = useChainPool(wallet.address);
+  const history = useSwapHistory(chain.pool?.poolId);
+  const pool = chain.pool;
+  const params = pool?.params ?? balancedGrowth;
+  const weightWad = pool?.weightWad ?? params.targetWad;
+  const paused = pool?.paused ?? false;
+  const worseningQuote = weightWad > params.targetWad ? pool?.quotes.zeroForOne : pool?.quotes.oneForZero;
+  const failure = chain.error ?? history.error ?? undefined;
+
+  async function refresh(): Promise<void> {
+    await Promise.all([chain.refetch(), history.refetch()]);
+  }
+
+  function series(range: RangeOption): ChartPoint[] {
+    if (!pool || !history.data) return historySeries([], weightWad, range, params);
+    const points = history.data.swaps.map((swap) => ({
+      secondsAgo: history.data.nowSeconds - swap.timestamp,
+      weightWad: weightAtPrice(swap.sqrtPriceX96, pool),
+    }));
+    return historySeries(points, weightWad, range, params);
+  }
+
+  return {
+    mode: "chain",
+    ready: pool !== undefined,
+    error: failure ? walletErrorMessage(failure) : undefined,
+    weightWad,
+    fee: worseningQuote ?? params.baseFee,
+    quotes: pool?.quotes ?? { zeroForOne: params.baseFee, oneForZero: params.baseFee },
+    params,
+    paused,
+    position: pool ? positionView(pool) : undefined,
+    activity: chainActivity(history.data, pool),
+    series,
+    pool,
+    isOwner: Boolean(pool && wallet.address && wallet.address.toLowerCase() === pool.owner.toLowerCase()),
+    refresh,
+  };
+}
+
+function useScenarioView(): GuardView {
+  const scenario = useScenario();
+  const params = balancedGrowth;
+  const weightWad = scenario.weightWad;
+  const live = worseningFee(weightWad, params);
+  const fee = scenario.paused ? params.baseFee : live;
+
+  return {
+    mode: "scenario",
+    ready: true,
+    weightWad,
+    fee,
+    quotes: {
+      zeroForOne: scenario.paused ? params.baseFee : quote(weightWad, true, params),
+      oneForZero: scenario.paused ? params.baseFee : quote(weightWad, false, params),
+    },
+    params,
+    paused: scenario.paused,
+    activity: scenario.activity,
+    series: (range) => scenarioSeries(weightWad, range, params),
+    isOwner: false,
+    scenario: { step: scenario.step, runSimulation: scenario.runSimulation, setPaused: scenario.setPaused },
+    refresh: async () => {},
+  };
+}
+
+function ChainGuard({ children }: { children: ReactNode }) {
+  return <GuardContext.Provider value={useChainView()}>{children}</GuardContext.Provider>;
+}
+
+function ScenarioGuard({ children }: { children: ReactNode }) {
+  return <GuardContext.Provider value={useScenarioView()}>{children}</GuardContext.Provider>;
 }
 
 export function GuardProvider({ children }: { children: ReactNode }) {
-  const configured = hookAddress();
-  const address = configured ?? zeroAddress;
-  const enabled = Boolean(configured);
-  const { address: account } = useAccount();
-  const { writeContract } = useWriteContract();
-  const { data } = useReadContracts({
-    contracts: [
-      { address, abi: hookAbi, functionName: "quoteFee", args: [true] },
-      { address, abi: hookAbi, functionName: "quoteFee", args: [false] },
-      { address, abi: hookAbi, functionName: "paused" },
-      { address, abi: hookAbi, functionName: "strategy" },
-      { address, abi: hookAbi, functionName: "poolId" },
-      { address, abi: hookAbi, functionName: "owner" },
-    ],
-    query: { enabled, refetchInterval: 12_000 },
-  });
-
-  const quoteZero = data?.[0]?.status === "success" ? (data[0].result as QuoteResult) : undefined;
-  const quoteOne = data?.[1]?.status === "success" ? (data[1].result as QuoteResult) : undefined;
-  const chainPaused = data?.[2]?.status === "success" ? Boolean(data[2].result) : undefined;
-  const params = strategyParams(data?.[3]?.status === "success" ? data[3].result : undefined);
-  const poolId = data?.[4]?.status === "success" ? data[4].result : undefined;
-  const owner = data?.[5]?.status === "success" ? data[5].result : undefined;
-  const poolReady = Boolean(poolId && poolId !== ZERO_POOL);
-  const slot0 = useReadContract({
-    address: stateViewAddress,
-    abi: stateViewAbi,
-    functionName: "getSlot0",
-    args: poolReady && poolId ? [poolId] : undefined,
-    query: { enabled: poolReady, refetchInterval: 12_000 },
-  });
-  const liquidityRead = useReadContract({
-    address: stateViewAddress,
-    abi: stateViewAbi,
-    functionName: "getLiquidity",
-    args: poolReady && poolId ? [poolId] : undefined,
-    query: { enabled: poolReady, refetchInterval: 12_000 },
-  });
-
-  const chainWeight = quoteZero ? quoteZero[1] : undefined;
-  const chainLive = chainWeight !== undefined && quoteOne !== undefined;
-  const [amount0, setAmount0] = useState(START_AMOUNT0);
-  const [amount1, setAmount1] = useState(START_AMOUNT1);
-  const [localPaused, setLocalPaused] = useState(false);
-  const [simulated, setSimulated] = useState(false);
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
-  const [activity, setActivity] = useState<ActivityItem[]>([
-    { id: "fee", text: "Fee adjusted to 0.40%", ago: "2m ago" },
-    { id: "strategy", text: "Strategy updated", ago: "10m ago" },
-    { id: "liquidity", text: "Liquidity added: $25,000", ago: "15m ago" },
-  ]);
-
-  const paused = chainLive && chainPaused !== undefined ? chainPaused : localPaused;
-  const weightWad = !simulated && chainWeight !== undefined ? chainWeight : weight0(amount0, amount1);
-  const worsening = weightWad > params.targetWad;
-  const chainFee = worsening ? Number(quoteZero?.[0]) : Number(quoteOne?.[0]);
-  const fee = paused ? params.baseFee : !simulated && chainLive ? chainFee : quote(weightWad, worsening, params);
-  const canPause = Boolean(
-    chainLive && account && typeof owner === "string" && account.toLowerCase() === owner.toLowerCase(),
-  );
-  const sqrtPrice = slot0.data?.[0];
-
-  function runSimulation(zeroForOne: boolean) {
-    const start0 = simulated || chainWeight === undefined ? amount0 : chainWeight;
-    const start1 = simulated || chainWeight === undefined ? amount1 : WAD - chainWeight;
-    const next = applyTrade(start0, start1, zeroForOne, TRADE_POINTS);
-    const nextWeight = weight0(next.amount0, next.amount1);
-    const nextFee = quote(nextWeight, zeroForOne, params);
-    setAmount0(next.amount0);
-    setAmount1(next.amount1);
-    setSimulated(true);
-    setStep(3);
-    setActivity((items) => [
-      { id: crypto.randomUUID(), text: `Fee adjusted to ${formatFee(nextFee)}`, ago: "just now" },
-      ...items,
-    ]);
-  }
-
-  function setPaused(nextPaused: boolean) {
-    if (configured && canPause) {
-      writeContract({ address: configured, abi: hookAbi, functionName: "setPaused", args: [nextPaused] });
-      return;
-    }
-    if (!chainLive) setLocalPaused(nextPaused);
-  }
-
-  const value = {
-    amount0,
-    amount1,
-    weightWad,
-    fee,
-    params,
-    paused,
-    activity,
-    step,
-    chainLive,
-    poolLiquidity: liquidityRead.data,
-    poolPrice: sqrtPrice !== undefined && sqrtPrice > 0n ? formatPrice(sqrtPrice) : undefined,
-    canPause,
-    runSimulation,
-    setPaused,
-  };
-
-  return <GuardContext.Provider value={value}>{children}</GuardContext.Provider>;
+  if (hookAddress) return <ChainGuard>{children}</ChainGuard>;
+  return <ScenarioGuard>{children}</ScenarioGuard>;
 }
 
-export function useGuard() {
+export function useGuard(): GuardView {
   const value = useContext(GuardContext);
   if (!value) {
     throw new Error("Guard state is missing");

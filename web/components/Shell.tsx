@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
-import { shortAddress, unichainSepolia } from "@/lib/chain";
+import type { ReactNode } from "react";
+import { ChainNotice } from "@/components/ChainNotice";
+import { WalletButton } from "@/components/WalletButton";
+import { shortAddress } from "@/lib/chain";
+import { useWalletStatus } from "@/lib/useWalletStatus";
+import { useGuard } from "@/state/guard";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -16,34 +19,8 @@ const links = [
 
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const onWallet = () => {
-    if (!mounted) return;
-    if (isConnected && chainId !== unichainSepolia.id) {
-      switchChain({ chainId: unichainSepolia.id });
-      return;
-    }
-    if (isConnected) {
-      disconnect();
-      return;
-    }
-    const injected = connectors[0];
-    if (injected) connect({ connector: injected });
-  };
-
-  const walletLabel = !mounted
-    ? "Wallet"
-    : isConnected && chainId !== unichainSepolia.id
-      ? "Switch network"
-      : isConnected && address
-        ? shortAddress(address)
-        : "Connect wallet";
+  const wallet = useWalletStatus();
+  const guard = useGuard();
 
   return (
     <div className="app">
@@ -60,15 +37,20 @@ export function Shell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="sidebar-foot small">
-          <div><span className="dot" />{mounted && isConnected ? "Connected" : "Wallet idle"}</div>
-          <div className="muted">{mounted && address ? shortAddress(address) : "Unichain Sepolia"}</div>
+          <div><span className={wallet.connected ? "dot" : "dot idle"} />{wallet.connected ? "Connected" : "Wallet idle"}</div>
+          <div className="muted">{wallet.address ? shortAddress(wallet.address) : "Unichain Sepolia"}</div>
         </div>
       </aside>
       <main className="main">
         <div className="topbar">
+          <div className="pill small">
+            <span className={guard.mode === "chain" ? "dot" : "dot idle"} />
+            {guard.mode === "chain" ? "Live pool" : "Scenario data"}
+          </div>
           <div className="pill small"><span className="dot" />Unichain Sepolia</div>
-          <button className="wallet-btn ready" type="button" onClick={onWallet}>{walletLabel}</button>
+          <WalletButton />
         </div>
+        <ChainNotice />
         {children}
       </main>
     </div>

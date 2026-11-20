@@ -85,16 +85,26 @@ contract BalanceGuardHook is IHooks {
 
     function quoteFee(bool zeroForOne) public view returns (uint24 fee, uint256 weight0Wad) {
         FeeCurve.Params memory params = strategy;
-        if (paused || positionOwner == address(0)) return (params.baseFee, params.targetWad);
+        if (paused) return (params.baseFee, params.targetWad);
+
+        (uint256 amount0, uint256 amount1, uint160 sqrtPriceX96) = inventory();
+        if (amount0 == 0 && amount1 == 0) return (params.baseFee, params.targetWad);
+
+        weight0Wad = Inventory.weight0(amount0, amount1, sqrtPriceX96);
+        fee = FeeCurve.quote(weight0Wad, zeroForOne, params);
+    }
+
+    function inventory() public view returns (uint256 amount0, uint256 amount1, uint160 sqrtPriceX96) {
+        if (positionOwner == address(0)) return (0, 0, 0);
 
         (uint128 positionLiquidity, uint256 growth0Last, uint256 growth1Last) =
             poolManager.getPositionInfo(poolId, positionOwner, tickLower, tickUpper, positionSalt);
-        if (positionLiquidity == 0) return (params.baseFee, params.targetWad);
+        if (positionLiquidity == 0) return (0, 0, 0);
 
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
-        if (sqrtPriceX96 == 0) return (params.baseFee, params.targetWad);
+        (sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
+        if (sqrtPriceX96 == 0) return (0, 0, 0);
 
-        (uint256 amount0, uint256 amount1) = Inventory.amounts(
+        (amount0, amount1) = Inventory.amounts(
             positionLiquidity,
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(tickLower),
@@ -103,10 +113,6 @@ contract BalanceGuardHook is IHooks {
         (uint256 growth0, uint256 growth1) = poolManager.getFeeGrowthInside(poolId, tickLower, tickUpper);
         amount0 += Inventory.owed(positionLiquidity, growth0, growth0Last);
         amount1 += Inventory.owed(positionLiquidity, growth1, growth1Last);
-        if (amount0 == 0 && amount1 == 0) return (params.baseFee, params.targetWad);
-
-        weight0Wad = Inventory.weight0(amount0, amount1, sqrtPriceX96);
-        fee = FeeCurve.quote(weight0Wad, zeroForOne, params);
     }
 
     function beforeInitialize(address, PoolKey calldata key, uint160) external returns (bytes4) {

@@ -19,6 +19,8 @@ Chain id 1301. Deploy block [68336438](https://sepolia.uniscan.xyz/block/6833643
 | GTA token1 | [0x5d46F24109fF5E0f8ef50913Fc673b8CAf30587d](https://sepolia.uniscan.xyz/address/0x5d46F24109fF5E0f8ef50913Fc673b8CAf30587d) |
 | PoolManager (Uniswap v4) | [0x00B036B58a818B1BC34d502D3fE730Db729e62AC](https://sepolia.uniscan.xyz/address/0x00B036B58a818B1BC34d502D3fE730Db729e62AC) |
 
+The weight comes from spot pool state. A large trade moves it within one block. The fee bounds cap what that trade can change.
+
 ## Layout
 
 `contracts/` holds the Foundry project.

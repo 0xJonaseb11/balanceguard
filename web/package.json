@@ -2,9 +2,9 @@
   "name": "balanceguard",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node init && next dev",
+    "build": "node init && next build",
+    "start": "node init && next start",
     "check:fee": "tsc -p tsconfig.check.json && node dist-check/feeCurve.check.js",
     "sync:deployment": "tsc -p tsconfig.scripts.json && node dist-scripts/syncDeployment.js"
   },

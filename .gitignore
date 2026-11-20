@@ -25,8 +25,6 @@ types/ethers-contracts/
 .pnp.*
 
 # secrets
-.env
-.env.*
 !.env.example
 
 # os and logs
@@ -46,3 +44,4 @@ web/dist-scripts/
 
 .cursor/
 .vercel
+config.bat

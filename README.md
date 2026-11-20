@@ -32,13 +32,22 @@ cd web && npm run check:fee
 
 Chain id 1301. PoolManager `0x00B036B58a818B1BC34d502D3fE730Db729e62AC`.
 
-Copy `.env.example` to `.env` and set `PRIVATE_KEY` for a funded Unichain Sepolia account.
+Copy `.env.example` to `.env` and set `PRIVATE_KEY` with the `0x` prefix. The account pays gas in Unichain Sepolia ETH. 0.01 ETH covers the full deploy.
 
 ```bash
 forge script contracts/script/Deploy.s.sol --rpc-url https://sepolia.unichain.org --broadcast
 ```
 
-The script mines the hook salt against the CREATE2 factory. It deploys two tokens, opens a dynamic fee pool through `PoolSeed`, records that position on the hook, and deploys the router. It then writes `web/.env.local` with the hook, the router, and the deploy block.
+The script mines the hook salt against the CREATE2 factory. It deploys two tokens, opens a dynamic fee pool through `PoolSeed`, records that position on the hook, and deploys the router.
+
+When the broadcast finishes, write the dashboard env file from the receipts:
+
+```bash
+cd web
+npm run sync:deployment
+```
+
+The command reads `broadcast/Deploy.s.sol/1301/run-latest.json` and writes `web/.env.local` with the hook, the router, and the deploy block. It stops with an error when the broadcast has no receipts, so a failed deploy never leaves addresses behind.
 
 ## Dashboard
 
@@ -59,14 +68,25 @@ With a deployed hook:
 
 The manager wallet can pause quoting in Pool Settings and retune the bounds in Strategies. The hook checks the bounds again on chain.
 
+## Production
+
+The Vercel project builds from the `web` directory. Set these variables for Production, Preview, and Development, using the values that `npm run sync:deployment` prints:
+
+- `NEXT_PUBLIC_HOOK_ADDRESS`
+- `NEXT_PUBLIC_ROUTER_ADDRESS`
+- `NEXT_PUBLIC_DEPLOY_BLOCK`
+
+Leave `NEXT_PUBLIC_RPC_URL` unset so the dashboard uses the public Unichain Sepolia RPC. Next.js reads `NEXT_PUBLIC` values at build time, so redeploy after you change any of them. A new hook deploy gives new addresses, so update all three together.
+
 ## Local fork
 
 Run the full flow against a local fork without spending testnet gas.
 
 ```bash
 anvil --fork-url https://sepolia.unichain.org --chain-id 1301
-PRIVATE_KEY=<anvil account key> NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545 \
-  forge script contracts/script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+PRIVATE_KEY=<anvil account key> forge script contracts/script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+cd web
+NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545 npm run sync:deployment
 ```
 
-Add the local network to the wallet with RPC `http://127.0.0.1:8545` and chain id 1301. Import an anvil account to trade. Remove `NEXT_PUBLIC_RPC_URL` from `web/.env.local` before you point the dashboard at the real chain.
+Add the local network to the wallet with RPC `http://127.0.0.1:8545` and chain id 1301. Import an anvil account to trade. Run `npm run sync:deployment` again without `NEXT_PUBLIC_RPC_URL` after a real deploy.

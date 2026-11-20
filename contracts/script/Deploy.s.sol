@@ -17,7 +17,7 @@ import {PoolSeed} from "../src/PoolSeed.sol";
 /*
  * @title DeployBalanceGuard
  * @author 0xJonaseb11
- * @notice Deploys the hook, tokens, pool, and router, then writes the dashboard env file
+ * @notice Deploys the hook, tokens, pool, and router
 */
 contract DeployBalanceGuard is Script {
     address internal constant POOL_MANAGER = 0x00B036B58a818B1BC34d502D3fE730Db729e62AC;
@@ -25,22 +25,19 @@ contract DeployBalanceGuard is Script {
     uint128 internal constant SEED_LIQUIDITY = 1_000 ether;
     int24 internal constant SEED_RANGE = 600;
     int24 internal constant TICK_SPACING = 60;
-    string internal constant DASHBOARD_ENV = "web/.env.local";
 
     struct Deployment {
         BalanceGuardHook hook;
         GuardRouter router;
         PoolSeed seed;
         PoolKey key;
-        uint256 deployBlock;
     }
 
     /*
-     * @notice Deploys with PRIVATE_KEY and writes the dashboard env file
+     * @notice Deploys with PRIVATE_KEY and logs the contract addresses
     */
     function run() external returns (Deployment memory deployment) {
         deployment = deploy(vm.envUint("PRIVATE_KEY"));
-        _writeDashboardEnv(deployment);
         console2.log("hook", address(deployment.hook));
         console2.log("router", address(deployment.router));
         console2.log("token0", Currency.unwrap(deployment.key.currency0));
@@ -54,7 +51,6 @@ contract DeployBalanceGuard is Script {
     function deploy(uint256 privateKey) public returns (Deployment memory deployment) {
         address deployer = vm.addr(privateKey);
         IPoolManager manager = IPoolManager(POOL_MANAGER);
-        deployment.deployBlock = block.number;
 
         vm.startBroadcast(privateKey);
         deployment.hook = _deployHook(manager, deployer);
@@ -108,25 +104,6 @@ contract DeployBalanceGuard is Script {
                 salt: bytes32(0)
             })
         );
-    }
-
-    /*
-     * @notice Writes the hook, router, and deploy block to the dashboard env file
-     * @param deployment Deployed addresses and deploy block
-    */
-    function _writeDashboardEnv(Deployment memory deployment) private {
-        string memory body = string.concat(
-            "NEXT_PUBLIC_HOOK_ADDRESS=",
-            vm.toString(address(deployment.hook)),
-            "\nNEXT_PUBLIC_ROUTER_ADDRESS=",
-            vm.toString(address(deployment.router)),
-            "\nNEXT_PUBLIC_DEPLOY_BLOCK=",
-            vm.toString(deployment.deployBlock),
-            "\n"
-        );
-        string memory rpcUrl = vm.envOr("NEXT_PUBLIC_RPC_URL", string(""));
-        if (bytes(rpcUrl).length > 0) body = string.concat(body, "NEXT_PUBLIC_RPC_URL=", rpcUrl, "\n");
-        vm.writeFile(DASHBOARD_ENV, body);
     }
 
     /*

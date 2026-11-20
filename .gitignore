@@ -42,5 +42,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 web/AGENTS.md
 web/dist-check/
+web/dist-scripts/
 
 .cursor/
+.vercel

@@ -1,97 +1,38 @@
-import { defineChain } from "viem";
+import { defineChain, isAddress, type Address, type Hash } from "viem";
+import { unichainSepolia as unichainSepoliaBase } from "viem/chains";
 
-export const unichainSepolia = defineChain({
-  id: 1301,
-  name: "Unichain Sepolia",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: ["https://sepolia.unichain.org"] } },
-  blockExplorers: { default: { name: "Uniscan", url: "https://sepolia.uniscan.xyz" } },
-});
+const rpcOverride = process.env.NEXT_PUBLIC_RPC_URL;
 
-export const stateViewAddress = "0xc199f1072a74d4e905aba1a84d9a45e2546b6222" as const;
+export const unichainSepolia = rpcOverride
+  ? defineChain({ ...unichainSepoliaBase, rpcUrls: { default: { http: [rpcOverride] } } })
+  : unichainSepoliaBase;
 
-export const zeroAddress = "0x0000000000000000000000000000000000000000" as const;
+export const poolManagerAddress: Address = "0x00B036B58a818B1BC34d502D3fE730Db729e62AC";
 
-export const hookAbi = [
-  {
-    type: "function",
-    name: "quoteFee",
-    stateMutability: "view",
-    inputs: [{ name: "zeroForOne", type: "bool" }],
-    outputs: [
-      { name: "fee", type: "uint24" },
-      { name: "weight0Wad", type: "uint256" },
-    ],
-  },
-  {
-    type: "function",
-    name: "paused",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "strategy",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [
-      { name: "targetWad", type: "uint256" },
-      { name: "minFee", type: "uint24" },
-      { name: "baseFee", type: "uint24" },
-      { name: "maxFee", type: "uint24" },
-      { name: "slope", type: "uint256" },
-    ],
-  },
-  {
-    type: "function",
-    name: "poolId",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "bytes32" }],
-  },
-  {
-    type: "function",
-    name: "owner",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address" }],
-  },
-  {
-    type: "function",
-    name: "setPaused",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "nextPaused", type: "bool" }],
-    outputs: [],
-  },
-] as const;
+export const zeroAddress: Address = "0x0000000000000000000000000000000000000000";
 
-export const stateViewAbi = [
-  {
-    type: "function",
-    name: "getSlot0",
-    stateMutability: "view",
-    inputs: [{ name: "poolId", type: "bytes32" }],
-    outputs: [
-      { name: "sqrtPriceX96", type: "uint160" },
-      { name: "tick", type: "int24" },
-      { name: "protocolFee", type: "uint24" },
-      { name: "lpFee", type: "uint24" },
-    ],
-  },
-  {
-    type: "function",
-    name: "getLiquidity",
-    stateMutability: "view",
-    inputs: [{ name: "poolId", type: "bytes32" }],
-    outputs: [{ name: "liquidity", type: "uint128" }],
-  },
-] as const;
+function readAddress(value: string | undefined): Address | undefined {
+  if (!value || !isAddress(value)) return undefined;
+  return value;
+}
 
-export function hookAddress(): `0x${string}` | undefined {
-  const value = process.env.NEXT_PUBLIC_HOOK_ADDRESS;
-  if (!value || !value.startsWith("0x") || value.length !== 42) return undefined;
-  return value as `0x${string}`;
+function readBlock(value: string | undefined): bigint | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  return BigInt(value);
+}
+
+export const hookAddress = readAddress(process.env.NEXT_PUBLIC_HOOK_ADDRESS);
+
+export const routerAddress = readAddress(process.env.NEXT_PUBLIC_ROUTER_ADDRESS);
+
+export const deployBlock = readBlock(process.env.NEXT_PUBLIC_DEPLOY_BLOCK);
+
+export function addressUrl(address: Address): string {
+  return `${unichainSepolia.blockExplorers.default.url}/address/${address}`;
+}
+
+export function txUrl(hash: Hash): string {
+  return `${unichainSepolia.blockExplorers.default.url}/tx/${hash}`;
 }
 
 export function shortAddress(value: string): string {

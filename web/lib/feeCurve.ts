@@ -1,4 +1,5 @@
 export const WAD = 10n ** 18n;
+export const PROTOCOL_FEE_CAP = 1_000_000;
 
 export type FeeParams = {
   targetWad: bigint;
@@ -15,6 +16,14 @@ export const balancedGrowth: FeeParams = {
   maxFee: 5000,
   slope: 23810n,
 };
+
+export function validateParams(params: FeeParams): string | undefined {
+  if (params.targetWad > WAD) return "Target must be 100% or less.";
+  if (params.minFee > params.baseFee) return "Min fee must not exceed the base fee.";
+  if (params.baseFee > params.maxFee) return "Base fee must not exceed the max fee.";
+  if (params.maxFee >= PROTOCOL_FEE_CAP) return "Max fee must stay under 100%.";
+  return undefined;
+}
 
 export function quote(weight0Wad: bigint, zeroForOne: boolean, params: FeeParams = balancedGrowth): number {
   if (weight0Wad > WAD) {
@@ -42,6 +51,11 @@ export function formatFeeDelta(fee: number, baseFee: number): string {
 
 export function formatWeight(weightWad: bigint): string {
   return `${(Number(weightWad) / 1e18 * 100).toFixed(1)}%`;
+}
+
+export function bandCopy(params: FeeParams): string {
+  const target = (params.targetWad * 100n) / WAD;
+  return `Keep inventory within ${target - 5n}% to ${target + 5n}% with adaptive fees.`;
 }
 
 export function riskLabel(weightWad: bigint, params: FeeParams = balancedGrowth): "Low" | "Medium" | "High" {

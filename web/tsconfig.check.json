@@ -8,5 +8,5 @@
     "types": ["node"],
     "skipLibCheck": true
   },
-  "files": ["lib/feeCurve.check.ts", "lib/feeCurve.ts", "lib/inventory.ts"]
+  "files": ["lib/feeCurve.check.ts", "lib/feeCurve.ts", "lib/inventory.ts", "lib/tickMath.ts"]
 }
